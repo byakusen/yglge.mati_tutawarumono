@@ -703,6 +703,7 @@ hintBtn.addEventListener('click',()=>{
   lastHint=hintBag.shift();
   qhint.innerHTML='<b>ヒント</b>'+lastHint;
   qhint.classList.add('on'); hintBtn.classList.add('on');
+  if(window.TestRun) TestRun.hint();                                         /* ← テストの練習 */
 });
 
 function ping(){ const a=el('pinpon'); a.currentTime=0; a.play().catch(()=>{}); }
@@ -733,7 +734,12 @@ function next(){ setTimeout(()=>{ i++; i<QS.length?render():finish(); },1500); }
 choices.addEventListener('click',e=>{
   const b=e.target.closest('.opt'); if(!b||b.disabled||locked) return;
   const q=QS[i];
-  if(q.mode==='word'||q.mode==='pick'){ q.ans===b.dataset.v?correct(b):(curWrong=true,b.classList.add('ng'),b.disabled=true,msg.textContent='おしい！　もういちど'); return; }
+  if(q.mode==='word'||q.mode==='pick'){
+    if(q.ans===b.dataset.v) correct(b);
+    else { curWrong=true; if(window.TestRun) TestRun.miss();                 /* ← テストの練習 */
+           b.classList.add('ng'); b.disabled=true; msg.textContent='おしい！　もういちど'; }
+    return;
+  }
   const o=q.opts[+b.dataset.n];
   if(o.ok){
     b.classList.add('ok'); b.disabled=true; b.querySelector('.mk').textContent='（○）';
@@ -744,7 +750,7 @@ choices.addEventListener('click',e=>{
       msg.textContent='せいかい！'; next();
     }else msg.textContent='あと'+(q.need-hit)+'つ！';
   }else{
-    curWrong=true;
+    curWrong=true; if(window.TestRun) TestRun.miss();                        /* ← テストの練習 */
     b.classList.add('ng'); b.disabled=true; b.querySelector('.mk').textContent='（×）';
     msg.textContent='おしい！　もういちど';
   }
@@ -761,6 +767,7 @@ function finish(){
   el('result').classList.add('on');
   board.classList.remove('locked');
   [...board.children].forEach(c=>c.classList.remove('ng','right'));
+  if(window.TestRun) TestRun.onDone(score, QS.length);                       /* ← テストの練習 */
 }
 
 function reset(){
@@ -773,9 +780,325 @@ function reset(){
   render();
 }
 
+/* ── テストの練習から つかう 口（外から タブと サブタブを 開く）── */
+window.APP_TEST={
+  sections:SECTIONS,
+  state:()=>({sec:sec, setIdx:setIdx, mode:mode}),
+  open(s,i,m){
+    sec=s; setIdx=i||0;
+    document.querySelectorAll('.tab').forEach((x,n)=>x.classList.toggle('on',n===sec));
+    const S=SECTIONS[sec];
+    el('ask').innerHTML=S.ask; el('hint').innerHTML=S.hint;
+    drawBoard(S.cards);
+    el('subtabs').innerHTML=S.sets.map((st,n)=>
+      '<button class="st'+(n===setIdx?' on':'')+'" data-i="'+n+'">'+st.label+'</button>').join('');
+    if(S.quiz){ mode='quiz'; el('toggle').style.visibility='hidden'; }
+    else { el('toggle').style.visibility=''; mode=(m==='explain'?'explain':'quiz'); }
+    document.querySelectorAll('.tg').forEach(x=>x.classList.toggle('on',x.dataset.m===mode));
+    applyMode();
+  }
+};
+
 el('again').addEventListener('click',reset);
 el('retry').addEventListener('click',()=>{ if(MISSED.length) startList(MISSED.slice(), true); });
 loadSection();
 </script>
+
+<!-- ============================================================
+     📝 テストの 練習 ①せってい（ここだけ 直す）
+     1つの「大問」＝ タブの 中の サブタブ（問題セット）1つ。
+       sec  … タブの 番号（0=長崎県に残るもの 1=まちに伝わるもの 2=受けつぐくふう 3=まとめ）
+       set  … そのタブの サブタブの 番号（0から）
+       no   … 帯と 結果に 出る 番号（'大問1' など。数字だけなら「1問め」と 出る）
+       name … 結果に 出す 名前（書かなければ タブ名＋サブタブ名）
+     tests は いくつでも よい。1つだけなら メニューを 出さずに すぐ 始まる。
+     ============================================================ -->
+<script>
+window.TEST_SETTEI = {
+  button: '📝 テストの れんしゅう',
+  tests: [
+    { title:'テスト1　長崎県に 残るもの・まちに 伝わるもの', items:[
+      { no:'大問1', sec:0, set:0 },
+      { no:'大問2', sec:0, set:1 },
+      { no:'大問3', sec:1, set:0 },
+      { no:'大問4', sec:1, set:1 } ] },
+    { title:'テスト2　受けつぐ くふう', items:[
+      { no:'大問1', sec:2, set:0 },
+      { no:'大問2', sec:2, set:1 },
+      { no:'大問3', sec:2, set:2 } ] },
+    { title:'ぜんぶ 通し（大問1〜7・28問）', items:[
+      { no:'大問1', sec:0, set:0 }, { no:'大問2', sec:0, set:1 },
+      { no:'大問3', sec:1, set:0 }, { no:'大問4', sec:1, set:1 },
+      { no:'大問5', sec:2, set:0 }, { no:'大問6', sec:2, set:1 },
+      { no:'大問7', sec:2, set:2 } ] }
+  ]
+  /* 部品の 場所を かえる ときだけ 書く
+  , parts:{ after:'.bar1', tabs:'#tabs,#subtabs,#toggle' } */
+};
+</script>
+
+<!-- ============================================================
+     📝 テストの 練習 ②しくみ（長崎県版・2026-09-27）— さわらない
+     取り出し版（test_renshu v1）を、この アプリの つくりに 合わせたもの。
+     ・1つの 大問＝ サブタブ1つ（何問か 入っている）。
+       大問の 終わり（結果が 出たとき）に つぎの 大問へ すすむ。
+     ・本体には 5か所だけ 口を 足してある（TestRun.miss / hint / onDone と APP_TEST）。
+     ============================================================ -->
+<script>
+window.TestRun = (function(){
+  'use strict';
+  const S = window.TEST_SETTEI, A = window.APP_TEST;
+  const P = Object.assign({ after:'.bar1', tabs:'#tabs,#subtabs,#toggle' }, (S && S.parts) || {});
+  const $ = id => document.getElementById(id);
+
+  const lack = [];
+  if(!A || typeof A.open !== 'function') lack.push('APP_TEST');
+  if(!S || !Array.isArray(S.tests) || !S.tests.length) lack.push('TEST_SETTEI.tests');
+  if(lack.length){ console.warn('テストの練習：ないので うごきません →', lack.join('・')); return null; }
+
+  /* ---- せっていを たしかめる（ない 大問は とばす）---- */
+  const TESTS = S.tests.map(t => ({
+    title: t.title || 'テスト',
+    items: (t.items || []).filter(it => {
+      const sc = it && A.sections[it.sec];
+      if(sc && sc.sets && sc.sets[it.set]) return true;
+      console.warn('テストの練習：大問「' + (it && it.no) + '」の タブ／サブタブが ないので とばします（' + t.title + '）');
+      return false;
+    })
+  })).filter(t => t.items.length);
+  if(!TESTS.length){ console.warn('テストの練習：出せる 大問が ありません'); return null; }
+
+  const setOf   = it => A.sections[it.sec].sets[it.set];
+  /* 結果に 出す 名前：1つの テストが 2つ以上の タブに またがる ときだけ タブ名も 出す */
+  const multiTab = t => new Set(t.items.map(it => it.sec)).size > 1;
+  const itemName = (it, t) => it.name
+    || ((t && multiTab(t) ? A.sections[it.sec].tab + '　' : '') + setOf(it).label);
+  const qCount  = it => setOf(it).qs.length;
+  const WAIT_MS = 3500;                       /* 結果を 見せてから つぎの 大問へ */
+
+  let run = null, myTimer = 0;
+
+  /* ---- 見た目（本体の <style> は さわらない）---- */
+  const css = document.createElement('style');
+  css.id = 'test-style';
+  css.textContent = [
+    '#test-mount{position:relative;margin-left:auto;display:flex;align-items:center;flex:0 0 auto;}',
+    '#test-btn{font:inherit;font-size:.9rem;font-weight:700;padding:.2rem .9rem;white-space:nowrap;',
+    '  color:#a97a12;background:#fdf6e0;border:.15rem solid var(--kin);border-radius:999px;cursor:pointer;transition:transform .12s;}',
+    '#test-btn:hover{background:var(--kin);color:#fff;}',
+    '#test-btn:active{transform:scale(.95);}',
+    '#test-btn:focus-visible,#test-menu button:focus-visible,#test-bar button:focus-visible,',
+    '#test-result button:focus-visible,#test-go:focus-visible{outline:.16rem solid var(--kin);outline-offset:.12rem;}',
+    '#test-menu{display:none;position:absolute;top:calc(100% + .5rem);right:0;z-index:950;background:#fff;',
+    '  border:.2rem solid var(--kin);border-radius:.9rem;padding:.5rem;box-shadow:0 .5rem 1.4rem rgba(15,55,78,.3);',
+    '  flex-direction:column;gap:.4rem;min-width:19rem;max-width:92vw;}',
+    '#test-menu.open{display:flex;}',
+    '#test-menu button{font:inherit;font-size:1rem;font-weight:700;padding:.5rem .8rem;border-radius:.6rem;',
+    '  border:.15rem solid var(--line);background:#fff;color:var(--ai);cursor:pointer;',
+    '  display:flex;justify-content:space-between;align-items:center;gap:.9rem;text-align:left;}',
+    '#test-menu button:hover{background:#fdf6e0;border-color:var(--kin);}',
+    '#test-menu small{font-size:.82rem;font-weight:400;color:#6f93a8;white-space:nowrap;}',
+    '#test-bar{display:none;align-items:center;gap:.5rem;background:#fff;border:.15rem solid var(--kin);',
+    '  border-radius:999px;padding:.12rem .4rem .12rem .8rem;color:var(--ai);font-weight:700;font-size:.9rem;white-space:nowrap;}',
+    '#test-dots{letter-spacing:.1em;color:var(--kin);}',
+    '#test-bar button{font:inherit;font-size:.82rem;font-weight:700;padding:.14rem .7rem;border-radius:999px;',
+    '  border:.13rem solid var(--line);background:#f2f7fa;color:#4a6b7d;cursor:pointer;}',
+    '#test-bar button:hover{border-color:var(--kin);color:#a97a12;}',
+    'body.testing #test-btn{display:none;}',
+    'body.testing #test-bar{display:flex;}',
+    'body.testing .btns{display:none;}',
+    P.tabs.split(',').map(s => 'body.testing ' + s.trim()).join(',') + '{pointer-events:none;opacity:.45;}',
+    '#test-go{font:inherit;font-size:1.05rem;font-weight:700;background:var(--kin);color:#fff;border:none;',
+    '  border-radius:999px;padding:.5rem 1.7rem;cursor:pointer;}',
+    '#test-go:hover{background:var(--syu);}',
+    '#test-result{display:none;position:fixed;inset:0;background:rgba(15,55,78,.72);z-index:1000;',
+    '  align-items:center;justify-content:center;padding:2vh 2vw;}',
+    '#test-result.show{display:flex;}',
+    '#test-result .tr-card{background:#fff;border-radius:1rem;padding:1.2rem 1.6rem;max-width:94vw;max-height:94vh;',
+    '  overflow:auto;box-shadow:0 .8rem 2rem rgba(0,0,0,.35);color:var(--sumi);}',
+    '#test-result .tr-title{font-size:1.5rem;font-weight:700;color:var(--ai);text-align:center;margin-bottom:.7rem;}',
+    '#test-result table{border-collapse:collapse;font-size:1.05rem;margin:0 auto;}',
+    '#test-result td{padding:.3rem .6rem;border-bottom:.12rem dashed #e2ddcb;white-space:nowrap;}',
+    '#test-result td.no{color:#6f93a8;font-weight:700;}',
+    '#test-result td.cnt{color:#4a6b7d;font-size:.95rem;}',
+    '#test-result td.r-ok{color:#2b9c6a;font-weight:700;}',
+    '#test-result td.r-ng{color:var(--syu);font-weight:700;}',
+    '#test-result td.r-sk{color:#9aa6b5;}',
+    '#test-result .tr-sum{text-align:center;margin-top:.8rem;font-size:1.15rem;font-weight:700;color:var(--ai);line-height:1.9;}',
+    '#test-result .tr-sum b{color:var(--syu);font-size:1.5em;margin:0 .1em;}',
+    '#test-result .tr-btns{display:flex;gap:.7rem;justify-content:center;margin-top:1rem;}',
+    '#test-result .tr-btns button{font:inherit;font-size:1.05rem;font-weight:700;border-radius:999px;padding:.5rem 1.5rem;cursor:pointer;}',
+    '#test-again{color:#fff;background:var(--ai);border:none;}',
+    '#test-again:hover{background:var(--syu);}',
+    '#test-close{color:#4a6b7d;background:#fff;border:.15rem solid var(--line);}'
+  ].join('\n');
+  document.head.appendChild(css);
+
+  /* ---- ボタン・メニュー・帯 ---- */
+  const mount = document.createElement('div');
+  mount.id = 'test-mount';
+  mount.innerHTML =
+      '<button id="test-btn" type="button">' + (S.button || '📝 テストの れんしゅう') + '</button>'
+    + '<div id="test-menu">'
+    +   TESTS.map((t,k) => '<button type="button" data-k="'+k+'"><span>'+t.title+'</span>'
+        + '<small>'+t.items.length+'大問・'+t.items.reduce((a,it)=>a+qCount(it),0)+'問</small></button>').join('')
+    + '</div>'
+    + '<div id="test-bar"><span id="test-no"></span><span id="test-dots"></span>'
+    +   '<button id="test-skip" type="button">とばす</button>'
+    +   '<button id="test-stop" type="button">やめる</button></div>';
+  const anchor = document.querySelector(P.after);
+  (anchor || document.body).appendChild(mount);
+  const res = document.createElement('div');
+  res.id = 'test-result';
+  document.body.appendChild(res);
+
+  $('test-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    if(TESTS.length === 1){ start(0); return; }
+    const m = $('test-menu');
+    m.classList.toggle('open');
+    if(m.classList.contains('open')) placeMenu();
+  });
+  function placeMenu(){
+    const m = $('test-menu');
+    m.style.left = ''; m.style.right = '';
+    const r = m.getBoundingClientRect(), mr = mount.getBoundingClientRect();
+    if(r.left < 8){ m.style.right = 'auto'; m.style.left = (8 - mr.left) + 'px'; }
+  }
+  $('test-menu').addEventListener('click', e => {
+    const b = e.target.closest('button[data-k]'); if(!b) return;
+    $('test-menu').classList.remove('open');
+    start(+b.dataset.k);
+  });
+  document.addEventListener('click', e => {
+    if(!e.target.closest('#test-mount')) $('test-menu').classList.remove('open');
+  });
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape') $('test-menu').classList.remove('open');
+  });
+  $('test-skip').addEventListener('click', () => skip());
+  $('test-stop').addEventListener('click', () => stop());
+
+  /* ---- 中身 ---- */
+  function cur(){ return run ? run.rec[run.i] : null; }
+  function clearMine(){ clearTimeout(myTimer); myTimer = 0; }
+  function dropGo(){ const n = $('test-go'); if(n) n.remove(); }
+  function bar(){
+    if(!run) return;
+    const T = TESTS[run.t], it = T.items[run.i];
+    $('test-no').textContent = '📝 ' + (/^\d+$/.test(it.no) ? it.no+'問め' : it.no) + '（' + (run.i+1) + '／' + T.items.length + '）';
+    $('test-dots').textContent = run.rec.map((r,i) => r.st==='done' ? '●' : r.st==='skip' ? '－' : (i===run.i ? '◎' : '○')).join('');
+  }
+  function go(i){
+    clearMine(); dropGo();
+    run.i = i;
+    const it = TESTS[run.t].items[i];
+    A.open(it.sec, it.set, 'quiz');
+    bar();
+  }
+  function start(t){
+    res.classList.remove('show');
+    const back = run ? run.back : A.state();
+    run = { t:t, i:0, back:back,
+            rec: TESTS[t].items.map(it => ({ miss:0, hint:false, st:'todo', score:0, n:qCount(it) })) };
+    document.body.classList.add('testing');
+    go(0);
+  }
+  function next(){
+    if(!run) return;
+    if(run.i + 1 < run.rec.length) go(run.i + 1); else finish();
+  }
+  function skip(){
+    const r = cur(); if(!r) return;
+    if(r.st !== 'done') r.st = 'skip';
+    clearMine(); dropGo();
+    next();
+  }
+  /* 大問が おわったら「つぎへ」を 出す（3.5秒で ひとりでに すすむ）*/
+  function showGo(){
+    const box = document.querySelector('.result');
+    if(!box) return;
+    let n = $('test-go');
+    if(!n){
+      n = document.createElement('button');
+      n.id = 'test-go'; n.type = 'button';
+      n.addEventListener('click', advance);
+    }
+    n.textContent = (run.i + 1 < run.rec.length) ? 'つぎの 大問へ ▶' : 'けっかを 見る ▶';
+    box.appendChild(n);
+    clearMine();
+    myTimer = setTimeout(advance, WAIT_MS);
+  }
+  function advance(){ clearMine(); dropGo(); next(); }
+
+  function finish(){
+    clearMine(); dropGo();
+    const T = TESTS[run.t];
+    let perfect = 0, gotAll = 0, qAll = 0;
+    const rows = T.items.map((it,i) => {
+      const r = run.rec[i];
+      let tx, c;
+      qAll += r.n;
+      if(r.st === 'done'){ gotAll += r.score; }
+      if(r.st === 'done' && r.miss === 0){ tx = '⭕ ノーミス'; c = 'r-ok'; perfect++; }
+      else if(r.st === 'done'){ tx = 'まちがい ' + r.miss + '回'; c = 'r-ng'; }
+      else { tx = 'とばした'; c = 'r-sk'; }
+      const cnt = (r.st === 'done') ? (r.score + '／' + r.n + '問') : ('－／' + r.n + '問');
+      return '<tr><td class="no">'+it.no+'</td><td>'+itemName(it,T)+'</td>'
+           + '<td class="cnt">'+cnt+'</td><td class="'+c+'">'+tx+'</td><td>'+(r.hint ? '💡' : '')+'</td></tr>';
+    }).join('');
+    res.innerHTML = '<div class="tr-card">'
+      + '<div class="tr-title">📝 '+T.title+'　おわり！</div>'
+      + '<table>'+rows+'</table>'
+      + '<div class="tr-sum">ノーミスで できた 大問　<b>'+perfect+'</b>／'+T.items.length+'<br>'
+      +   '1回目で せいかい　<b>'+gotAll+'</b>／'+qAll+'問</div>'
+      + '<div class="tr-btns"><button id="test-again" type="button">もう一度</button>'
+      +   '<button id="test-close" type="button">とじる</button></div>'
+      + '</div>';
+    res.classList.add('show');
+    $('test-again').onclick = () => start(run.t);
+    $('test-close').onclick = () => stop();
+    $('test-again').focus();
+  }
+  /* やめる／とじる：はじめに 開いていた タブへ もどる */
+  function stop(){
+    if(!run) return;
+    const back = run.back;
+    run = null;
+    clearMine(); dropGo();
+    res.classList.remove('show');
+    document.body.classList.remove('testing');
+    const ok = back && A.sections[back.sec] && A.sections[back.sec].sets[back.setIdx];
+    if(ok) A.open(back.sec, back.setIdx, back.mode);
+    else   A.open(TESTS[0].items[0].sec, TESTS[0].items[0].set, 'explain');
+  }
+
+  const api = {
+    on: () => !!run,
+    /* 本体の finish() から：この 大問は おわり */
+    onDone(score, total){
+      if(!run || res.classList.contains('show')) return !!run;
+      const r = cur(); if(!r || r.st !== 'todo') return true;
+      r.st = 'done';
+      r.score = (typeof score === 'number') ? score : 0;
+      r.n = (typeof total === 'number') ? total : r.n;
+      bar();
+      showGo();
+      return true;
+    },
+    /* まちがった ボタンを おした とき */
+    miss(){ const r = cur(); if(r && r.st === 'todo') r.miss++; },
+    /* ヒントを 出した とき */
+    hint(){ const r = cur(); if(r && r.st === 'todo') r.hint = true; },
+    /* 外から つかう とき用 */
+    start: t => start(t || 0),
+    stop:  () => stop(),
+    record:() => run ? JSON.parse(JSON.stringify(run.rec)) : null
+  };
+  return api;
+})();
+</script>
+<!-- 📝 テストの 練習 ここまで -->
+
 </body>
 </html>
