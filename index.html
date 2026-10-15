@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>わたしたちのまちに伝わるもの｜長崎県</title>
+<title>わたしたちの町に伝わるもの｜長崎県</title>
 <style>
   :root{
     --ai:#1b4a68; --ai2:#0f374e; --syu:#d6392c; --kin:#e0a52c; --sumi:#2b2b2b;
@@ -62,7 +62,26 @@
     display:grid; grid-template-columns:1.12fr 1fr; gap:.7rem;
     padding:.65rem .9rem .8rem;
   }
+  .left{display:flex; flex-direction:column; gap:.55rem; min-height:0; min-width:0;}
+  .stage{
+    display:none; flex:1 1 auto; min-height:0;
+    background:var(--paper); border-radius:.9rem; padding:.55rem;
+    box-shadow:0 .15rem .5rem rgba(27,74,104,.14);
+    flex-direction:column; align-items:center; justify-content:center; gap:.4rem;
+  }
+  .stage img{flex:1 1 auto; min-height:0; width:100%; object-fit:contain; display:block; border-radius:.5rem; animation:fadein .25s ease-out;}
+  .stage .scap{flex:0 0 auto; font-size:1.5rem; font-weight:700; color:var(--ai); text-align:center; line-height:1.3;}
+  .stage .sempty{font-size:1.2rem; line-height:2.2; color:#5c7b8d; text-align:center;}
+  .left.explain .stage{display:flex;}
+  .left.explain .board{
+    flex:0 0 auto; height:clamp(7.5rem,24vh,12rem);
+    grid-template-columns:none; grid-template-rows:1fr; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr);
+  }
+  .left.explain .board.n5 .card{grid-column:auto;}
+  .left.explain .card .cap{font-size:.95rem; padding:.18rem .2rem .22rem;}
+  @keyframes fadein{from{opacity:0;} to{opacity:1;}}
   .board{
+    flex:1 1 auto;
     background:var(--paper); border-radius:.9rem; padding:.55rem;
     box-shadow:0 .15rem .5rem rgba(27,74,104,.14);
     display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:.55rem;
@@ -130,7 +149,7 @@
   .ex.on{display:flex;}
   .ex h2{
     flex:0 0 auto; display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
-    font-size:1.45rem; color:var(--ai); line-height:1.3;
+    font-size:1.7rem; color:var(--ai); line-height:1.3;
     border-bottom:.16rem solid var(--kin); padding-bottom:.4rem; margin-bottom:.6rem;
   }
   .ex h2 .mark{
@@ -138,8 +157,8 @@
     font-size:1.05rem; display:flex; align-items:center; justify-content:center; flex:0 0 auto;
   }
   .place{font-size:.85rem; font-weight:400; color:#fff; background:#6f93a8; border-radius:999px; padding:.1rem .7rem; margin-left:auto;}
-  .ex .body{flex:1 1 auto; min-height:0; overflow-y:auto; font-size:1.12rem; line-height:2;}
-  .ex .body p + p{margin-top:.55rem;}
+  .ex .body{flex:1 1 auto; min-height:0; overflow-y:auto; font-size:1.45rem; line-height:2.1;}
+  .ex .body p + p{margin-top:.75rem;}
   .ex .body em{font-style:normal; color:var(--syu); font-weight:700;}
 
   /* もんだい */
@@ -262,7 +281,7 @@
 
 <div class="bar1">
   <span class="grade">4年 社会</span>
-  <h1>わたしたちのまちに<ruby>伝<rt>つた</rt></ruby>わるもの</h1>
+  <h1>わたしたちの<ruby>町<rt>まち</rt></ruby>に<ruby>伝<rt>つた</rt></ruby>わるもの</h1>
 </div>
 <div class="bar2">
   <p class="ask" id="ask"></p>
@@ -274,7 +293,10 @@
 </div>
 
 <main>
-  <section class="board" id="board"></section>
+  <div class="left" id="left">
+    <div class="stage" id="stage"></div>
+    <section class="board" id="board"></section>
+  </div>
 
   <section class="panel">
     <div class="view on" id="vExplain">
@@ -599,6 +621,8 @@ function applyMode(){
   el('vExplain').classList.toggle('on',mode==='explain');
   vQuiz.classList.toggle('on',mode==='quiz');
   clearCards();
+  el('left').classList.toggle('explain',mode==='explain');
+  if(mode==='explain') clearStage();
   if(mode==='explain'){ el('ex').classList.remove('on'); el('hint').style.display=''; board.classList.remove('locked'); }
   else start();
 }
@@ -640,9 +664,17 @@ function closeZoom(){ zoom.classList.remove('on'); }
 zoom.addEventListener('click',closeZoom);
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeZoom(); });
 
+function clearStage(){
+  el('stage').innerHTML='<p class="sempty">'+R('下','した')+'のカードをクリックすると、<br>ここに'+R('大','おお')+'きく'+R('出','で')+'ます。</p>';
+}
+function showStage(d){
+  el('stage').innerHTML=d.img
+    ? '<img src="'+d.img+'" alt=""><p class="scap">'+(d.cap||d.head||'')+'</p>'
+    : '<p class="scap">'+(d.head||d.cap||'')+'</p>';
+}
 function showExplain(k){
   const d=CURCARDS.find(x=>x.k===k);
-  openZoom(d);
+  showStage(d);
   [...board.children].forEach(c=>c.setAttribute('aria-pressed',String(c.dataset.k===k)));
   el('hint').style.display='none';
   el('ex').classList.add('on');
